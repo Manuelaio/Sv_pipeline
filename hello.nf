@@ -4,6 +4,15 @@ params.help = false
 if (params.help) {
     log.info """
     -----------------------------------------------------------------------
+    Required arguments: 
+    --reference_file    Absolute path of reference FASTA file. Index file must be in the same directory
+    
+
+    --alignment_list    Tab delimited file with two column: sample_id and absolute path of aligned files. The index file must be same directory
+     
+
+    --outdir            Directory for output file
+        
     """
 }
 
@@ -27,17 +36,25 @@ if (!alignment_list.exists()){
    exit 1
 }
 
-params.excluded_regions_delly = "Hg38/exlude.regions.delly.human.hg38.excl.tsv"
+project_dir = projectDir
+params.excluded_regions_delly = "$project_dir/Hg38/exlude.regions.delly.human.hg38.excl.tsv"
 excluded_regions_delly = file(params.excluded_regions_delly, type: "file") 
-
+params.excluded_regions_smoove = "$project_dir/Hg38/exclude.smoove.cnvnator_100bp.GRCh38.20170403.bed" 
+excluded_regions_smoove = file(params.excluded_regions_smoove, type: "file")  
+params.variant_catalog = "$project_dir/Hg38/ExpansioHunter_variant_catalog.json"
+variant_catalog = file(params.variant_catalog, type: "file") 
+println "Project : $workflow.projectDir"
 outdir= params.outdir ?: './results'
+log.info("\n")
+log.info(println "Project : $workflow.projectDir" )
+log.info("\n")
 
   Channel
        .fromPath(alignment_list)
        .splitCsv(sep: "\t", header: ["sample_id", "alignment_file"])
        .map { row -> tuple(row.sample_id, row.alignment_file) }
-       .into {manta_channel ; manta_post_channel ;delly_channel ; delly_post_channel; ExpansionHunter_channel ; 
-       smoove_channel; smoove_post_channel; mosdepth_channel}
+       .into {manta_channel ; manta_post_channel ;delly_channel ; delly_post_channel; delly_post_channel2; ExpansionHunter_channel ; 
+       smoove_channel; smoove_post_channel; mosdepth_channel; survivor_channel}
   
   process runManta {
        input:
@@ -76,29 +93,37 @@ process manta_post_processing {
        set sample_id, alignment_file from delly_channel
        file reference_file_index
        output:
-       file "$sample_id-tmp-delly.vcf" into delly_file 
+       file "$sample_id-delly.bcf" into delly_file 
        script:
         """
         delly call -g $reference_file -x $excluded_regions_delly  -o tmp.bcf $alignment_file -q 20 -s 15 -z 5
         delly call -g $reference_file -v tmp.bcf -x $excluded_regions_delly -o $sample_id-delly.bcf  $alignment_file -q 20 -s 15 -z 5
-        bcftools view $sample_id-delly.bcf > $sample_id-tmp-delly.vcf
-        rm $sample_id-delly.bcf tmp.bcf
+        rm tmp.bcf 
         """
 }
 
-process post_processingDellyTest {
-       publishDir "$outdir/results/delly_out", mode: 'copy' 
+process python_delly {
        input:
        set sample_id, alignment_file from delly_post_channel  
-       file output_delly from delly_file
+       file "$sample_id-delly.bcf" from delly_file
+       output:
+       file "out.vcf" into python_output
+       script:
+       """
+       python $project_dir/procesing_delly.py $sample_id-delly.bcf
+       """
+}
+
+process post_processing_delly {
+       publishDir "$outdir/results/delly_out", mode: 'copy'
+       input:                                                                   
+       set sample_id, alignment_file from delly_post_channel2 
+       file "out.vcf" from python_output
        output:
        file "$sample_id-final-delly.vcf" into delly_output_file
        script:
        """
-       python /expanse/lustre/projects/ddp195/eiovino/sv_pipeline_nf/procesing_delly.py $output_delly
-       bcftools view -i 'SVLEN>=50 ' out.vcf > tmpDelly.vcf
-       bcftools view -i "%FILTER='PASS'" tmpDelly.vcf > $sample_id-final-delly.vcf
-       rm tmpDelly.vcf out.vcf
+       bcftools view -i 'SVLEN>=50 ' out.vcf | bcftools view -i "%FILTER='PASS'" > $sample_id-final-delly.vcf
        """
 }
 
@@ -112,7 +137,7 @@ process post_processingDellyTest {
        file "$sample_id-smoove.vcf.gz" into smoove_file                           
        script:                                                                    
         """                                                                       
-        smoove call --name $sample_id --fasta $reference_file -p 8 $alignment_file 
+        smoove call --name $sample_id --exclude $excluded_regions_smoove --fasta $reference_file -p 8 $alignment_file 
         """                                                                       
                                                                               
    } 
@@ -120,7 +145,7 @@ process post_processingDellyTest {
 process post_processing_smoove { 
     publishDir "$outdir/results/smoove_out", mode: 'copy' 
     input:
-    set sample_id from smoove_post_channel                                                                      
+    set sample_id, alignment_file from smoove_post_channel                                                                      
     file output_smoove from smoove_file                                           
     output: 
     file "$sample_id-filtered_smoove.vcf" into smoove_ouput_file
@@ -130,33 +155,34 @@ process post_processing_smoove {
     """                                                                         
 }  
 
-process runExpansionHunter {
-       publishDir "$outdir/results/ExpansionHunter_out", mode: 'copy'
-       input:                                                                   
-       set sample_id, alignment_file from ExpansionHunter_channel
-       output: 
-       file "*.vcf" into ExH_output
-       script:                                                                  
-       """                                                                       
-       ExpansionHunter --reads $alignment_file --reference $reference_file --variant-catalog /expanse/lustre/projects/ddp195/eiovino/sv_pipeline_nf/Hg38/ExpansioHunter_variant_catalog.json  --output-prefix $sample_id
-       """                                                                                                                                                 
-   } 
+//process runExpansionHunter {
+//       publishDir "$outdir/results/ExpansionHunter_out", mode: 'copy'
+//       input:                                                                   
+//       set sample_id, alignment_file from ExpansionHunter_channel
+//       output: 
+//       file "*.vcf" into ExH_output
+//       script:                                                                  
+//       """                                                                       
+//       ExpansionHunter --reads $alignment_file --reference $reference_file --variant-catalog $variant_catalog  --output-prefix $sample_id
+//       """                                                                                                                                                 
+//   } 
 
 
 process runSurvivor {                                                    
        publishDir "$outdir/results/survivor_out", mode: 'copy'
        input:
+       set sample_id, alignment_file from survivor_channel
        file filtered_manta from manta_output_file                                                                    
        file filtered_smoove from smoove_ouput_file
        file filtered_delly from delly_output_file              
        output: 
-       file "sample_merged.vcf" into survivor_output 
+       file "$sample_id-sample_merged.vcf" into survivor_output 
        script:                                                                  
        """                                                                       
        ls $filtered_manta   > vcf_list.txt 
        ls $filtered_smoove  >> vcf_list.txt
        ls $filtered_delly   >> vcf_list.txt
-       SURVIVOR merge vcf_list.txt 1000 1 1 1 1 50 sample_merged.vcf 
+       SURVIVOR merge vcf_list.txt 1000 1 1 1 1 50 $sample_id-sample_merged.vcf 
        """                                                                                                                         
    }                                                                            
          
@@ -165,12 +191,13 @@ process mosdepth {
        publishDir "$outdir/results/mosdepth_out", mode: 'copy'
        input:                                                                     
        set sample_id, alignment_file from mosdepth_channel
+       file reference_file_index
        output: 
        file "*mosedepth.wgs.mosdepth.*" into mosdepth_out                                                                    
                                                                                 
        script:                                                                  
        """                                                                       
-       mosdepth -n --fast-mode --by 500 $sample_id-mosedepth.wgs  $alignment_file --fasta $reference_file
+       mosdepth -n --fast-mode --by 500 $sample_id-mosedepth.wgs -f $reference_file $alignment_file
        """                                                                      
    } 
 
