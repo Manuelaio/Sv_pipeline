@@ -14,79 +14,79 @@ nextflow.enable.dsl = 1
 //reference_file = params.reference_file
 //reference_file_index = params.reference_file_index
 
-//process mosdepth_test {
-//     output: 
-//     file "output/version.txt" into mosdepth_file
-//     //file "${ccs_bam.simpleName}.ccs.fastq" into ccs_fastq_file
-//     script:
-//     """
-//     mkdir output
-//     mosdepth --version > output/version.txt
-//     """
-//}
+process mosdepth_test {
+     output: 
+     file "output/version.txt" into mosdepth_file
+     //file "${ccs_bam.simpleName}.ccs.fastq" into ccs_fastq_file
+     script:
+     """
+     mkdir output
+     mosdepth --version > output/version.txt
+     """
+}
 
-//process bcftools_test {                                                       
-//     script:                                                                  
-//     """                                                                                                                                   
-//     bcftools --version > version.txt                                  
-//     """                                                                      
-//}  
+process bcftools_test {                                                       
+     script:                                                                  
+     """                                                                                                                                   
+     bcftools --version > version.txt                                  
+     """                                                                      
+}  
 
-//process output_test {
-//    input:
-//    file mosdepth_output from mosdepth_file
-//
-//    script:
-//    """
-//    echo $mosdepth_output > my_version.txt
-//    """
-//}
+process output_test {
+    input:
+    file mosdepth_output from mosdepth_file
 
-// Delly singularity container does not have bash...
-// process delly_test {
-//     script:
-//     """
-//     delly call -g $reference_file -o tmp.bcf $alignment_file -q 20 -s 15 -z 5
-//     """
-// }
+    script:
+    """
+    echo $mosdepth_output > my_version.txt
+    """
+}
 
-// process expansionhunter_test {                                                         
-//      script:                                                                  
-//      """                                                                      
-//      ExpansionHunter --help
-//      """                                                                      
-// }           
+ Delly singularity container does not have bash...
+ process delly_test {
+     script:
+     """
+     delly call -g $reference_file -o tmp.bcf $alignment_file -q 20 -s 15 -z 5
+     """
+ }
 
-//process survivor_test {                                                         
-//     script:                                                                  
-//     """                                                                      
-//     SURVIVOR &> ls.txt                                                             
-//     """                                                                      
-//}  
+ process expansionhunter_test {                                                         
+      script:                                                                  
+      """                                                                      
+      ExpansionHunter --help
+      """                                                                      
+ }           
 
-//process smoove_test {
-//    input:
-//    alignment_file
-//    alignment_file_index
-//    reference_file
-//    reference_file_index
+process survivor_test {                                                         
+     script:                                                                  
+     """                                                                      
+     SURVIVOR &> ls.txt                                                             
+     """                                                                      
+}  
 
-//    script:
-//    """
-//    smoove call --name REACH000236 --fasta $reference_file $alignment_file
-//    """
-//}
+process smoove_test {
+    input:
+    alignment_file
+    alignment_file_index
+    reference_file
+    reference_file_index
 
-//process manta_test {
-//     output: 
-//     
-//     script:
-//     """
-//     configManta.py --bam $alignment_file --referenceFasta $reference_file --runDir run_folder/
-//     # cd run_folder
-//     # python runWorkflow.py
-//     """
-//}
+    script:
+    """
+    smoove call --name REACH000236 --fasta $reference_file $alignment_file
+    """
+}
+
+process manta_test {
+     output: 
+     
+     script:
+     """
+     configManta.py --bam $alignment_file --referenceFasta $reference_file --runDir run_folder/
+     # cd run_folder
+     # python runWorkflow.py
+     """
+}
 
   params.input_csv = "input_data.csv"
   Channel
