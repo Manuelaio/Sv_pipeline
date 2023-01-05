@@ -1,0 +1,16 @@
+Consequence
+SYMBOL
+BIOTYPE
+Feature
+CDS_position
+HGVSc
+HGVSp
+Protein_position
+Amino_acids
+SpliceAI_cutoff
+five_prime_UTR_variant_consequence
+five_prime_UTR_variant_annotation
+OverlapPC
+MAX_AF_gnomad
+Promoter
+SegDups
